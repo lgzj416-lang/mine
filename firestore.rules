@@ -27,20 +27,22 @@ service cloud.firestore {
       return data.keys().hasAll(['logoText', 'introduction']) &&
              data.logoText is string && data.logoText.size() <= 16 &&
              data.introduction is string && data.introduction.size() <= 1000 &&
-             (!data.keys().contains('image2') || (data.image2 is string && data.image2.size() <= 1500000)) &&
-             (!data.keys().contains('image3') || (data.image3 is string && data.image3.size() <= 1500000));
+             (!data.keys().contains('image2') || (data.image2 is string && data.image2.size() <= 1048576)) &&
+             (!data.keys().contains('image3') || (data.image3 is string && data.image3.size() <= 1048576)) &&
+             (!data.keys().contains('updatedAt') || (data.updatedAt is string && data.updatedAt.size() <= 100));
     }
 
     // Message Validation Helper
     function isValidMessage(data) {
       return data.keys().hasAll(['id', 'name', 'content', 'time', 'avatarColor', 'avatarIcon']) &&
-             data.keys().size() == 6 &&
+             (data.keys().size() == 6 || (data.keys().size() == 7 && data.keys().contains('createdAt'))) &&
              data.id is string && data.id.size() <= 64 &&
              data.name is string && data.name.size() <= 20 &&
              data.content is string && data.content.size() <= 200 &&
-             data.time is string && data.time.size() <= 20 &&
+             data.time is string && data.time.size() <= 40 &&
              data.avatarColor is string && data.avatarColor.size() <= 10 &&
-             data.avatarIcon is string && data.avatarIcon.size() <= 10;
+             data.avatarIcon is string && data.avatarIcon.size() <= 10 &&
+             (!data.keys().contains('createdAt') || data.createdAt is timestamp);
     }
 
     // Site Settings Collection Rules

@@ -255,6 +255,52 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.65): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(event.target?.result as string);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = () => {
+        resolve('');
+      };
+    };
+    reader.onerror = () => {
+      resolve('');
+    };
+  });
+};
+
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [prevPage, setPrevPage] = useState<number>(0);
@@ -320,20 +366,19 @@ const App: React.FC = () => {
     loadSettings();
   }, []);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, slideNum: number) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>, slideNum: number) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = reader.result as string;
+      try {
+        const compressedBase64 = await compressImage(file, 1000, 1000, 0.6);
         if (slideNum === 2) {
-          setImage2(base64String);
+          setImage2(compressedBase64);
           if (auth.currentUser && auth.currentUser.email === 'lgzj416@gmail.com') {
             try {
               await setDoc(doc(db, 'settings', 'main'), {
                 logoText,
                 introduction,
-                image2: base64String,
+                image2: compressedBase64,
                 image3,
                 updatedAt: new Date().toISOString()
               }, { merge: true });
@@ -342,14 +387,14 @@ const App: React.FC = () => {
             }
           }
         } else if (slideNum === 3) {
-          setImage3(base64String);
+          setImage3(compressedBase64);
           if (auth.currentUser && auth.currentUser.email === 'lgzj416@gmail.com') {
             try {
               await setDoc(doc(db, 'settings', 'main'), {
                 logoText,
                 introduction,
                 image2,
-                image3: base64String,
+                image3: compressedBase64,
                 updatedAt: new Date().toISOString()
               }, { merge: true });
             } catch (err) {
@@ -357,8 +402,9 @@ const App: React.FC = () => {
             }
           }
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (error) {
+        console.error("Failed to compress image:", error);
+      }
     }
   };
 
