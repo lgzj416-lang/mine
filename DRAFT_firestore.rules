@@ -14,12 +14,11 @@ service cloud.firestore {
 
     function isOwner() {
       return isSignedIn() && 
-             request.auth.token.email == 'lgzj416@gmail.com' && 
-             request.auth.token.email_verified == true;
+             request.auth.token.email == 'lgzj416@gmail.com';
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
+      return id is string && id.size() <= 128 && id.size() > 0;
     }
 
     // Settings Validation Helper

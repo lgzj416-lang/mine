@@ -453,6 +453,16 @@ const App: React.FC = () => {
   const [inputContent, setInputContent] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState('👾');
 
+  const [deletedSeedIds, setDeletedSeedIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('deleted_seed_message_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [messageToDelete, setMessageToDelete] = useState<string | null>(null);
+
   const EMOJIS = ['👾', '🎹', '🎧', '⚡', '🌟', '💿', '🎵', '🕹️'];
 
   useEffect(() => {
@@ -571,12 +581,28 @@ const App: React.FC = () => {
 
   const handleAdminDeleteMessage = async (messageId: string) => {
     if (isEditMode || (currentUser && currentUser.email === 'lgzj416@gmail.com')) {
-      if (window.confirm('确定要删除这条留言吗？')) {
-        try {
-          await deleteDoc(doc(db, 'messages', messageId));
-        } catch (err) {
-          handleFirestoreError(err, OperationType.DELETE, `messages/${messageId}`);
-        }
+      setMessageToDelete(messageId);
+    }
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (!messageToDelete) return;
+    const isSeed = messageToDelete.startsWith('seed-');
+    if (isSeed) {
+      const updated = [...deletedSeedIds, messageToDelete];
+      setDeletedSeedIds(updated);
+      try {
+        localStorage.setItem('deleted_seed_message_ids', JSON.stringify(updated));
+      } catch (err) {
+        console.error(err);
+      }
+      setMessageToDelete(null);
+    } else {
+      try {
+        await deleteDoc(doc(db, 'messages', messageToDelete));
+        setMessageToDelete(null);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `messages/${messageToDelete}`);
       }
     }
   };
@@ -1237,7 +1263,7 @@ const App: React.FC = () => {
                       <div className="bg-black/5 border-4 border-black p-4 flex flex-col h-full min-h-[220px] md:min-h-0 justify-between">
                         <div className="overflow-y-auto pr-1 space-y-3 max-h-[300px] md:max-h-[380px] no-scrollbar flex-1">
                           <AnimatePresence initial={false}>
-                            {messages.map((msg) => (
+                            {messages.filter(msg => !deletedSeedIds.includes(msg.id)).map((msg) => (
                               <motion.div
                                 key={msg.id}
                                 initial={{ opacity: 0, y: 15 }}
@@ -1283,7 +1309,7 @@ const App: React.FC = () => {
                         
                         <div className="mt-2 text-center">
                           <span className="font-mono text-[9px] text-black/40 font-bold uppercase tracking-widest">
-                            已显示 {messages.length} 条留言
+                            已显示 {messages.filter(msg => !deletedSeedIds.includes(msg.id)).length} 条留言
                           </span>
                         </div>
                       </div>
@@ -1377,6 +1403,44 @@ const App: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setShowAuthModal(false)}
+                  className="w-full py-2 bg-gray-100 text-black font-mono text-[10px] uppercase tracking-widest border-2 border-black hover:bg-gray-200 transition-all cursor-pointer"
+                >
+                  取消 CANCEL
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DELETE CONFIRMATION MODAL */}
+        {messageToDelete !== null && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
+            <div className="bg-white border-4 border-black p-6 sm:p-8 max-w-sm w-full shadow-flat-lg rounded-none text-left relative animate-fade-in pointer-events-auto">
+              <button 
+                onClick={() => setMessageToDelete(null)}
+                className="absolute top-2 right-3 font-mono font-black text-black hover:text-red-500 text-lg cursor-pointer"
+              >
+                ×
+              </button>
+              <h3 className="font-display font-black text-xl uppercase tracking-tight text-black mb-1">
+                Confirm Deletion
+              </h3>
+              <p className="font-mono text-[10px] text-gray-500 uppercase tracking-widest mb-4">
+                确认删除留言
+              </p>
+              <p className="font-sans text-xs text-black leading-relaxed mb-5">
+                您确定要删除这条留言吗？此操作不可撤销。
+              </p>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={confirmDeleteMessage}
+                  className="w-full py-3 bg-red-500 text-white font-display font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-black shadow-flat hover:bg-black active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                >
+                  🔥 确认删除 DELETE
+                </button>
+                <button
+                  onClick={() => setMessageToDelete(null)}
                   className="w-full py-2 bg-gray-100 text-black font-mono text-[10px] uppercase tracking-widest border-2 border-black hover:bg-gray-200 transition-all cursor-pointer"
                 >
                   取消 CANCEL
