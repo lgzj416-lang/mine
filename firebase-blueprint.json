@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "Settings": {
+      "title": "Site Settings",
+      "description": "Customizable content fields for the personal website",
+      "type": "object",
+      "properties": {
+        "logoText": {
+          "type": "string",
+          "description": "The text display for the logo"
+        },
+        "introduction": {
+          "type": "string",
+          "description": "The personalized introduction text"
+        },
+        "image2": {
+          "type": "string",
+          "description": "Base64 image or URL for studio image"
+        },
+        "image3": {
+          "type": "string",
+          "description": "Base64 image or URL for desk image"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when modified"
+        }
+      },
+      "required": ["logoText", "introduction"]
+    },
+    "Message": {
+      "title": "Guestbook Message",
+      "description": "A message left by visitors in the guestbook",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the visitor"
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the message"
+        },
+        "time": {
+          "type": "string",
+          "description": "Human readable time display"
+        },
+        "avatarColor": {
+          "type": "string",
+          "description": "The avatar hex background color"
+        },
+        "avatarIcon": {
+          "type": "string",
+          "description": "The selected emoji icon"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when created"
+        }
+      },
+      "required": ["id", "name", "content", "time", "avatarColor", "avatarIcon"]
+    }
+  },
+  "firestore": {
+    "settings/{settingId}": {
+      "schema": "Settings",
+      "description": "Configuration settings for the site layout and branding"
+    },
+    "messages/{messageId}": {
+      "schema": "Message",
+      "description": "Visitor guestbook entries"
+    }
+  }
+}

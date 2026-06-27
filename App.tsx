@@ -8,6 +8,24 @@ import {
   Trash2,
   Plus
 } from 'lucide-react';
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  deleteDoc,
+  query, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp 
+} from 'firebase/firestore';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut 
+} from 'firebase/auth';
+import { db, auth } from './src/firebase';
 
 interface ThemePreset {
   name: string;
@@ -190,6 +208,53 @@ const SEEDED_MESSAGES: Message[] = [
   }
 ];
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [prevPage, setPrevPage] = useState<number>(0);
@@ -199,56 +264,135 @@ const App: React.FC = () => {
   const [aspectRatio, setAspectRatio] = useState<'fluid' | '9-16' | '3-4'>('fluid');
 
   // Edit mode state
-  const [isEditMode, setIsEditMode] = useState<boolean>(() => {
-    return localStorage.getItem('lgzj_is_edit_mode') === 'true';
-  });
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
   // Editable logo text state
-  const [logoText, setLogoText] = useState<string>(() => {
-    return localStorage.getItem('lgzj_logo_text') || 'L-Gzj';
-  });
+  const [logoText, setLogoText] = useState<string>('L-Gzj');
 
   // Editable introduction state
-  const [introduction, setIntroduction] = useState<string>(() => {
-    return localStorage.getItem('lgzj_introduction') || 'L-Gzj 是一位专注探索的二次元声音创作者与数字极客，沉浸于声音设计、8-Bit / 16-Bit 晶体管合成以及虚拟世界的音画交互。';
-  });
+  const [introduction, setIntroduction] = useState<string>('L-Gzj 是一位专注探索的二次元声音创作者与数字极客，沉浸于声音设计、8-Bit / 16-Bit 晶体管合成以及虚拟世界的音画交互。');
 
   // Local image replacement states
-  const [image2, setImage2] = useState<string>(() => {
-    return localStorage.getItem('lgzj_img2') || '/src/assets/images/studio_full_view_1782593998885.jpg';
-  });
-  const [image3, setImage3] = useState<string>(() => {
-    return localStorage.getItem('lgzj_img3') || '/src/assets/images/studio_desk_closeup_1782594012599.jpg';
-  });
+  const [image2, setImage2] = useState<string>('/src/assets/images/studio_full_view_1782593998885.jpg');
+  const [image3, setImage3] = useState<string>('/src/assets/images/studio_desk_closeup_1782594012599.jpg');
+
+  // Auth states
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authErrorMsg, setAuthErrorMsg] = useState('');
 
   const fileInputRef2 = useRef<HTMLInputElement>(null);
   const fileInputRef3 = useRef<HTMLInputElement>(null);
+
+  // Listen for Auth changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthLoading(false);
+      if (user && user.email === 'lgzj416@gmail.com') {
+        // Automatically set Edit Mode true when owner logs in
+        setIsEditMode(true);
+      } else {
+        setIsEditMode(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Load site config settings from Firestore on boot
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'main');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.logoText) setLogoText(data.logoText);
+          if (data.introduction) setIntroduction(data.introduction);
+          if (data.image2 !== undefined) setImage2(data.image2);
+          if (data.image3 !== undefined) setImage3(data.image3);
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, 'settings/main');
+      }
+    };
+    loadSettings();
+  }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, slideNum: number) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const base64String = reader.result as string;
         if (slideNum === 2) {
           setImage2(base64String);
-          localStorage.setItem('lgzj_img2', base64String);
+          if (auth.currentUser && auth.currentUser.email === 'lgzj416@gmail.com') {
+            try {
+              await setDoc(doc(db, 'settings', 'main'), {
+                logoText,
+                introduction,
+                image2: base64String,
+                image3,
+                updatedAt: new Date().toISOString()
+              }, { merge: true });
+            } catch (err) {
+              handleFirestoreError(err, OperationType.WRITE, 'settings/main');
+            }
+          }
         } else if (slideNum === 3) {
           setImage3(base64String);
-          localStorage.setItem('lgzj_img3', base64String);
+          if (auth.currentUser && auth.currentUser.email === 'lgzj416@gmail.com') {
+            try {
+              await setDoc(doc(db, 'settings', 'main'), {
+                logoText,
+                introduction,
+                image2,
+                image3: base64String,
+                updatedAt: new Date().toISOString()
+              }, { merge: true });
+            } catch (err) {
+              handleFirestoreError(err, OperationType.WRITE, 'settings/main');
+            }
+          }
         }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleDeleteImage = (slideNum: number) => {
+  const handleDeleteImage = async (slideNum: number) => {
     if (slideNum === 2) {
       setImage2('');
-      localStorage.removeItem('lgzj_img2');
+      if (auth.currentUser && auth.currentUser.email === 'lgzj416@gmail.com') {
+        try {
+          await setDoc(doc(db, 'settings', 'main'), {
+            logoText,
+            introduction,
+            image2: '',
+            image3,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, 'settings/main');
+        }
+      }
     } else if (slideNum === 3) {
       setImage3('');
-      localStorage.removeItem('lgzj_img3');
+      if (auth.currentUser && auth.currentUser.email === 'lgzj416@gmail.com') {
+        try {
+          await setDoc(doc(db, 'settings', 'main'), {
+            logoText,
+            introduction,
+            image2,
+            image3: '',
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, 'settings/main');
+        }
+      }
     }
   };
 
@@ -257,18 +401,8 @@ const App: React.FC = () => {
     setActiveThemeIdx(currentPage % THEME_PRESETS.length);
   }, [currentPage]);
 
-  // Message board guestbook states
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = localStorage.getItem('lgzj_messages');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return SEEDED_MESSAGES;
-      }
-    }
-    return SEEDED_MESSAGES;
-  });
+  // Message board guestbook states and Firebase sync
+  const [messages, setMessages] = useState<Message[]>(SEEDED_MESSAGES);
   const [inputName, setInputName] = useState('');
   const [inputContent, setInputContent] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState('👾');
@@ -276,25 +410,129 @@ const App: React.FC = () => {
   const EMOJIS = ['👾', '🎹', '🎧', '⚡', '🌟', '💿', '🎵', '🕹️'];
 
   useEffect(() => {
-    localStorage.setItem('lgzj_messages', JSON.stringify(messages));
-  }, [messages]);
+    const q = query(collection(db, 'messages'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loadedMessages: Message[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        loadedMessages.push({
+          id: data.id,
+          name: data.name,
+          content: data.content,
+          time: data.time || '刚刚',
+          avatarColor: data.avatarColor,
+          avatarIcon: data.avatarIcon
+        });
+      });
+      if (loadedMessages.length > 0) {
+        setMessages(loadedMessages);
+      } else {
+        setMessages(SEEDED_MESSAGES);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'messages');
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputName.trim() || !inputContent.trim()) return;
 
+    const messageId = Date.now().toString();
+    const formattedTime = new Date().toLocaleDateString('zh-CN', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: messageId,
       name: inputName.trim().slice(0, 12),
       content: inputContent.trim().slice(0, 100),
-      time: '刚刚',
+      time: formattedTime,
       avatarColor: THEME_PRESETS[Math.floor(Math.random() * THEME_PRESETS.length)].primary,
       avatarIcon: selectedEmoji
     };
 
-    setMessages(prev => [newMessage, ...prev]);
-    setInputName('');
-    setInputContent('');
+    try {
+      await setDoc(doc(db, 'messages', messageId), {
+        ...newMessage,
+        createdAt: serverTimestamp()
+      });
+      setInputName('');
+      setInputContent('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `messages/${messageId}`);
+    }
+  };
+
+  const handleToggleEditMode = async () => {
+    if (isEditMode) {
+      // Exiting Edit Mode -> SAVE Logo Text & Introduction to Firestore!
+      if (currentUser && currentUser.email === 'lgzj416@gmail.com') {
+        try {
+          await setDoc(doc(db, 'settings', 'main'), {
+            logoText,
+            introduction,
+            image2,
+            image3,
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, 'settings/main');
+        }
+      }
+      setIsEditMode(false);
+    } else {
+      // Entering Edit Mode -> Check if logged in as owner
+      if (currentUser && currentUser.email === 'lgzj416@gmail.com') {
+        setIsEditMode(true);
+      } else {
+        setShowAuthModal(true);
+      }
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setAuthErrorMsg('');
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      if (user.email === 'lgzj416@gmail.com') {
+        setIsEditMode(true);
+        setShowAuthModal(false);
+      } else {
+        setAuthErrorMsg('验证失败：只有站长(lgzj416@gmail.com)拥有此站点的编辑和管理权限。');
+        await signOut(auth);
+      }
+    } catch (error: any) {
+      console.error('Google Auth Error:', error);
+      setAuthErrorMsg('登录出错：' + (error.message || String(error)));
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      setIsEditMode(false);
+    } catch (error) {
+      console.error('Sign Out Error:', error);
+    }
+  };
+
+  const handleAdminDeleteMessage = async (messageId: string) => {
+    if (isEditMode || (currentUser && currentUser.email === 'lgzj416@gmail.com')) {
+      if (window.confirm('确定要删除这条留言吗？')) {
+        try {
+          await deleteDoc(doc(db, 'messages', messageId));
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, `messages/${messageId}`);
+        }
+      }
+    }
   };
 
   const lastWheelTime = useRef<number>(0);
@@ -507,22 +745,29 @@ const App: React.FC = () => {
               ))}
             </div>
 
-            {/* Edit Mode toggle button */}
-            <button
-              onClick={() => {
-                const nextVal = !isEditMode;
-                setIsEditMode(nextVal);
-                localStorage.setItem('lgzj_is_edit_mode', String(nextVal));
-              }}
-              className={`px-3 py-1 text-[10px] sm:text-xs font-display font-black uppercase tracking-wider transition-all border-2 border-black shadow-flat active:translate-x-0.5 active:translate-y-0.5 ${
-                isEditMode 
-                  ? 'bg-red-500 text-white hover:bg-red-600' 
-                  : 'bg-white text-black hover:bg-black hover:text-white'
-              }`}
-              title={isEditMode ? "保存并退出编辑" : "开启编辑模式"}
-            >
-              {isEditMode ? "💾 退出编辑" : "✏️ 编辑模式"}
-            </button>
+            {/* Edit Mode / Admin Controls */}
+            <div className="flex items-center gap-2">
+              {currentUser && currentUser.email === 'lgzj416@gmail.com' && (
+                <button
+                  onClick={handleSignOut}
+                  className="px-2.5 py-1 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider bg-black text-white border-2 border-black shadow-flat active:translate-x-0.5 active:translate-y-0.5 hover:bg-white hover:text-black transition-all cursor-pointer"
+                  title="退出站长身份登录"
+                >
+                  🚪 登出
+                </button>
+              )}
+              <button
+                onClick={handleToggleEditMode}
+                className={`px-3 py-1 text-[10px] sm:text-xs font-display font-black uppercase tracking-wider transition-all border-2 border-black shadow-flat active:translate-x-0.5 active:translate-y-0.5 ${
+                  isEditMode 
+                    ? 'bg-red-500 text-white hover:bg-red-600' 
+                    : 'bg-white text-black hover:bg-black hover:text-white'
+                }`}
+                title={isEditMode ? "保存并退出编辑" : "开启编辑模式"}
+              >
+                {isEditMode ? "💾 退出并保存" : "✏️ 编辑模式"}
+              </button>
+            </div>
 
             {/* Hidden Input elements for image replacement */}
             <input
@@ -838,7 +1083,7 @@ const App: React.FC = () => {
                       </a>
 
                       <a
-                        href="https://y.music.163.com/m/user?id=604626568"
+                        href="https://y.music.163.com/m/user?id=1679831678"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="group flex items-center justify-between p-4 bg-white border-2 border-black text-black font-display font-black tracking-tight text-sm sm:text-base uppercase rounded-none hover:bg-black hover:text-white transition-all shadow-flat active:translate-x-0.5 active:translate-y-0.5"
@@ -952,7 +1197,7 @@ const App: React.FC = () => {
                                 initial={{ opacity: 0, y: 15 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.9 }}
-                                className="p-3 bg-white border-2 border-black shadow-flat flex gap-3 items-start"
+                                className="p-3 bg-white border-2 border-black shadow-flat flex gap-3 items-start animate-fade-in"
                               >
                                 <div 
                                   className="w-8 h-8 rounded-full border border-black flex items-center justify-center text-base shrink-0 shadow-flat-sm"
@@ -965,9 +1210,21 @@ const App: React.FC = () => {
                                     <span className="font-sans font-extrabold text-xs text-black truncate">
                                       {msg.name}
                                     </span>
-                                    <span className="font-mono text-[9px] text-gray-500 shrink-0">
-                                      {msg.time}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-[9px] text-gray-500 shrink-0">
+                                        {msg.time}
+                                      </span>
+                                      {(isEditMode || (currentUser && currentUser.email === 'lgzj416@gmail.com')) && (
+                                        <button
+                                          onClick={() => handleAdminDeleteMessage(msg.id)}
+                                          className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase bg-red-100 hover:bg-red-500 hover:text-white text-red-600 border border-red-400 rounded-sm transition-all cursor-pointer shadow-flat-sm active:translate-x-[0.5px] active:translate-y-[0.5px]"
+                                          title="删除此条留言"
+                                        >
+                                          <span>🗑️</span>
+                                          <span className="hidden sm:inline">删除</span>
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                   <p className="font-sans text-xs font-bold text-gray-700 leading-normal break-words">
                                     {msg.content}
@@ -1038,6 +1295,50 @@ const App: React.FC = () => {
 
         {/* Premium minimal horizontal visual scroll line representing dynamic system feel */}
         <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-20 h-0.5 bg-black/15 rounded-full z-40 pointer-events-none" />
+
+        {/* OWNER GOOGLE AUTH MODAL */}
+        {showAuthModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
+            <div className="bg-white border-4 border-black p-6 sm:p-8 max-w-sm w-full shadow-flat-lg rounded-none text-left relative animate-fade-in pointer-events-auto">
+              <button 
+                onClick={() => setShowAuthModal(false)}
+                className="absolute top-2 right-3 font-mono font-black text-black hover:text-red-500 text-lg cursor-pointer"
+              >
+                ×
+              </button>
+              <h3 className="font-display font-black text-xl uppercase tracking-tight text-black mb-1">
+                Owner Verification
+              </h3>
+              <p className="font-mono text-[10px] text-gray-500 uppercase tracking-widest mb-4">
+                站长身份登录验证
+              </p>
+              <p className="font-sans text-xs text-black leading-relaxed mb-5">
+                此网站开启了云端数据存储。开启编辑模式需要验证站长身份。请使用站长 Google 账号 (<b>lgzj416@gmail.com</b>) 登录以继续。
+              </p>
+
+              {authErrorMsg && (
+                <div className="mb-4 p-3 bg-red-100 border-2 border-red-500 text-red-700 font-sans text-xs font-bold">
+                  {authErrorMsg}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleGoogleSignIn}
+                  className="w-full py-3 bg-[#FCB714] text-black font-display font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-black shadow-flat hover:bg-black hover:text-white active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                >
+                  🚀 使用 Google 账号登录
+                </button>
+                <button
+                  onClick={() => setShowAuthModal(false)}
+                  className="w-full py-2 bg-gray-100 text-black font-mono text-[10px] uppercase tracking-widest border-2 border-black hover:bg-gray-200 transition-all cursor-pointer"
+                >
+                  取消 CANCEL
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

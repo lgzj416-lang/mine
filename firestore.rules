@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isSignedIn() && 
+             request.auth.token.email == 'lgzj416@gmail.com' && 
+             request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Settings Validation Helper
+    function isValidSettings(data) {
+      return data.keys().hasAll(['logoText', 'introduction']) &&
+             data.logoText is string && data.logoText.size() <= 16 &&
+             data.introduction is string && data.introduction.size() <= 1000 &&
+             (!data.keys().contains('image2') || (data.image2 is string && data.image2.size() <= 1500000)) &&
+             (!data.keys().contains('image3') || (data.image3 is string && data.image3.size() <= 1500000));
+    }
+
+    // Message Validation Helper
+    function isValidMessage(data) {
+      return data.keys().hasAll(['id', 'name', 'content', 'time', 'avatarColor', 'avatarIcon']) &&
+             data.keys().size() == 6 &&
+             data.id is string && data.id.size() <= 64 &&
+             data.name is string && data.name.size() <= 20 &&
+             data.content is string && data.content.size() <= 200 &&
+             data.time is string && data.time.size() <= 20 &&
+             data.avatarColor is string && data.avatarColor.size() <= 10 &&
+             data.avatarIcon is string && data.avatarIcon.size() <= 10;
+    }
+
+    // Site Settings Collection Rules
+    match /settings/{settingId} {
+      allow get: if true;
+      allow create, update: if isOwner() && isValidSettings(request.resource.data) && isValidId(settingId);
+      allow delete: if isOwner() && isValidId(settingId);
+    }
+
+    // Message Board Guestbook Rules
+    match /messages/{messageId} {
+      allow get, list: if true;
+      allow create: if isValidMessage(request.resource.data) && isValidId(messageId);
+      allow delete: if isOwner() && isValidId(messageId);
+      allow update: if false; // Messages are immutable once posted
+    }
+  }
+}
