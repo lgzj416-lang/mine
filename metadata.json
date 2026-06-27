@@ -1,0 +1,6 @@
+{
+  "name": "L-Gzj Personal Website",
+  "description": "A minimalist flat geometry H5 personal website for L-Gzj, featuring dynamic transitions, finger swiping controls, and smooth geometric animations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

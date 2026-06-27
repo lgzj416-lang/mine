@@ -1,0 +1,52 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L-Gzj | A Man Always Lively To The World</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #FCB714;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        .screen-content {
+            width: 100vw;
+            height: 100vh;
+            background: #FCB714;
+            overflow: hidden;
+            position: relative;
+        }
+    </style>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontFamily: {
+                    sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    display: ['Space Grotesk', 'sans-serif'],
+                    mono: ['JetBrains Mono', 'monospace'],
+                }
+            }
+        }
+    }
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div class="screen-content no-scrollbar">
+        <div id="root" class="h-full w-full"></div>
+    </div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>
