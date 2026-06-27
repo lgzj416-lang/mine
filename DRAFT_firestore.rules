@@ -19,7 +19,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
     }
 
     // Settings Validation Helper
@@ -35,13 +35,12 @@ service cloud.firestore {
     // Message Validation Helper
     function isValidMessage(data) {
       return data.keys().hasAll(['id', 'name', 'content', 'time', 'avatarColor', 'avatarIcon']) &&
-             (data.keys().size() == 6 || (data.keys().size() == 7 && data.keys().contains('createdAt'))) &&
-             data.id is string && data.id.size() <= 64 &&
-             data.name is string && data.name.size() <= 20 &&
-             data.content is string && data.content.size() <= 200 &&
-             data.time is string && data.time.size() <= 40 &&
-             data.avatarColor is string && data.avatarColor.size() <= 10 &&
-             data.avatarIcon is string && data.avatarIcon.size() <= 10 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.content is string && data.content.size() <= 1000 &&
+             data.time is string && data.time.size() <= 100 &&
+             data.avatarColor is string && data.avatarColor.size() <= 50 &&
+             data.avatarIcon is string && data.avatarIcon.size() <= 50 &&
              (!data.keys().contains('createdAt') || data.createdAt is timestamp);
     }
 
