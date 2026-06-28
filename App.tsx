@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { 
   ExternalLink, 
   ChevronUp, 
@@ -306,8 +306,41 @@ const App: React.FC = () => {
   const [prevPage, setPrevPage] = useState<number>(0);
   const [activeThemeIdx, setActiveThemeIdx] = useState<number>(0);
   
-  // Interactive stereoscopic 3D parallax offsets
-  const [parallax, setParallax] = useState({ x: 0, y: 0 });
+  // Interactive stereoscopic 3D parallax motion values
+  const rawParallaxX = useMotionValue(0);
+  const rawParallaxY = useMotionValue(0);
+
+  // Smooth the raw parallax offsets using spring physics matching the original buttery-smooth parameters
+  const springX = useSpring(rawParallaxX, { stiffness: 90, damping: 18, mass: 0.8 });
+  const springY = useSpring(rawParallaxY, { stiffness: 90, damping: 18, mass: 0.8 });
+
+  // Generate dynamic 3D box-shadow style for neobrutalism shadow borders (moves opposite to parallax with preserved subtle amplitude)
+  const shadow12 = useTransform([springX, springY], ([x, y]) => `${12 - (x as number) * 0.15}px ${12 - (y as number) * 0.15}px 0px 0px #000000`);
+  const shadow8 = useTransform([springX, springY], ([x, y]) => `${8 - (x as number) * 0.15}px ${8 - (y as number) * 0.15}px 0px 0px #000000`);
+  const shadow6 = useTransform([springX, springY], ([x, y]) => `${6 - (x as number) * 0.15}px ${6 - (y as number) * 0.15}px 0px 0px #000000`);
+  const shadow4 = useTransform([springX, springY], ([x, y]) => `${4 - (x as number) * 0.15}px ${4 - (y as number) * 0.15}px 0px 0px #000000`);
+  const shadow2 = useTransform([springX, springY], ([x, y]) => `${2 - (x as number) * 0.15}px ${2 - (y as number) * 0.15}px 0px 0px #000000`);
+  const shadow1_5 = useTransform([springX, springY], ([x, y]) => `${1.5 - (x as number) * 0.15}px ${1.5 - (y as number) * 0.15}px 0px 0px #000000`);
+
+  // Displacements for floating label badges / text offsets with proportionally scaled multipliers to keep current subtle feel
+  const logoTextX_25 = useTransform(springX, (x) => `${-(x as number) * 0.25}px`);
+  const logoTextY_25 = useTransform(springY, (y) => `${-(y as number) * 0.25}px`);
+  const logoTextX_22 = useTransform(springX, (x) => `${-(x as number) * 0.22}px`);
+  const logoTextY_22 = useTransform(springY, (y) => `${-(y as number) * 0.22}px`);
+  const logoTextX_18 = useTransform(springX, (x) => `${-(x as number) * 0.18}px`);
+  const logoTextY_18 = useTransform(springY, (y) => `${-(y as number) * 0.18}px`);
+
+  // Slide content wrapper restored to original beautiful parallax displacement (0.55 multiplier)
+  const wrapperX = useTransform(springX, (x) => (x as number) * 0.55);
+  const wrapperY = useTransform(springY, (y) => (y as number) * 0.55);
+
+  // Background absolute geometric shapes parallax values (3 layers)
+  const shapeParallaxX0 = useTransform(springX, (x) => (x as number) * (1 * 0.15));
+  const shapeParallaxY0 = useTransform(springY, (y) => (y as number) * (1 * 0.15));
+  const shapeParallaxX1 = useTransform(springX, (x) => (x as number) * (2 * 0.15));
+  const shapeParallaxY1 = useTransform(springY, (y) => (y as number) * (2 * 0.15));
+  const shapeParallaxX2 = useTransform(springX, (x) => (x as number) * (3 * 0.15));
+  const shapeParallaxY2 = useTransform(springY, (y) => (y as number) * (3 * 0.15));
   
   // Aspect ratio self-adaptation settings: 'fluid' (default), '9-16' (mobile), '3-4' (tablet)
   const [aspectRatio, setAspectRatio] = useState<'fluid' | '9-16' | '3-4'>('fluid');
@@ -664,13 +697,14 @@ const App: React.FC = () => {
     const dx = currentX - touchStartX.current;
     const dy = currentY - touchStartY.current;
 
-    // Small range clamp: prevent moving too far (max 40px)
-    const maxOffset = 40;
+    // Beautiful original touch range limit (max 12px)
+    const maxOffset = 12;
     const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
     const px = clamp(dx, -maxOffset, maxOffset);
     const py = clamp(dy, -maxOffset, maxOffset);
 
-    setParallax({ x: px, y: py });
+    rawParallaxX.set(px);
+    rawParallaxY.set(py);
   };
 
   const onTouchEnd = (e: React.TouchEvent) => {
@@ -698,7 +732,8 @@ const App: React.FC = () => {
     touchStartX.current = null;
 
     // Elastic snap back on release
-    setParallax({ x: 0, y: 0 });
+    rawParallaxX.set(0);
+    rawParallaxY.set(0);
   };
 
   // Mouse move for 3D stereoscopic parallax on desktop
@@ -709,16 +744,18 @@ const App: React.FC = () => {
     const dx = e.clientX - centerX;
     const dy = e.clientY - centerY;
     
-    // Normalized parallax multiplier: max 45px displacement in any direction
-    const maxMove = 45;
+    // Original beautiful desktop dynamic displacement (max 12px)
+    const maxMove = 12;
     const xOffset = (dx / (rect.width / 2)) * maxMove;
     const yOffset = (dy / (rect.height / 2)) * maxMove;
     
-    setParallax({ x: xOffset, y: yOffset });
+    rawParallaxX.set(xOffset);
+    rawParallaxY.set(yOffset);
   };
 
   const onMouseLeave = () => {
-    setParallax({ x: 0, y: 0 });
+    rawParallaxX.set(0);
+    rawParallaxY.set(0);
   };
 
   // Keyboard controls
@@ -779,14 +816,17 @@ const App: React.FC = () => {
       <div className="absolute inset-0 pointer-events-none opacity-[0.06] bg-[radial-gradient(#000000_1px,transparent_1px)] [background-size:20px_20px] z-10" />
 
       {/* Interactive responsive wrapper container holding the actual content */}
-      <div
+      <motion.div
         className={
           aspectRatio === 'fluid'
-            ? 'w-full h-full relative overflow-hidden flex flex-col z-20 transition-all duration-500'
+            ? 'w-full h-full relative overflow-hidden flex flex-col z-20 transition-[width,height,max-width,max-height,border-radius] duration-500'
             : aspectRatio === '9-16'
-              ? `aspect-[9/16] h-[85vh] max-h-[850px] max-w-[95vw] border-4 border-black bg-gradient-to-b ${currentTheme.bgGrad} shadow-flat-xl rounded-2xl relative overflow-hidden flex flex-col z-20 transition-all duration-500`
-              : `aspect-[3/4] h-[82vh] max-h-[780px] max-w-[95vw] border-4 border-black bg-gradient-to-b ${currentTheme.bgGrad} shadow-flat-xl rounded-none relative overflow-hidden flex flex-col z-20 transition-all duration-500`
+              ? `aspect-[9/16] h-[85vh] max-h-[850px] max-w-[95vw] border-4 border-black bg-gradient-to-b ${currentTheme.bgGrad} rounded-2xl relative overflow-hidden flex flex-col z-20 transition-[width,height,max-width,max-height,border-radius] duration-500`
+              : `aspect-[3/4] h-[82vh] max-h-[780px] max-w-[95vw] border-4 border-black bg-gradient-to-b ${currentTheme.bgGrad} rounded-none relative overflow-hidden flex flex-col z-20 transition-[width,height,max-width,max-height,border-radius] duration-500`
         }
+        style={{
+          boxShadow: aspectRatio !== 'fluid' ? shadow12 : undefined
+        }}
         id="h5-canvas-wrapper"
       >
         {/* SCHEDULED GEOMETRIC SHAPES */}
@@ -800,6 +840,10 @@ const App: React.FC = () => {
             if (shape.colorKey === 'shape2') bgColor = currentTheme.shape2;
             if (shape.colorKey === 'shape3') bgColor = currentTheme.shape3;
 
+            const mod = shape.id % 3;
+            const xOffset = mod === 0 ? shapeParallaxX0 : mod === 1 ? shapeParallaxX1 : shapeParallaxX2;
+            const yOffset = mod === 0 ? shapeParallaxY0 : mod === 1 ? shapeParallaxY1 : shapeParallaxY2;
+
             return (
               <motion.div
                 key={shape.id}
@@ -812,8 +856,6 @@ const App: React.FC = () => {
                   rotate: layout.rotate,
                   borderRadius: layout.borderRadius || '0px',
                   opacity: layout.opacity,
-                  x: parallax.x * ((shape.id % 3 + 1) * 0.15),
-                  y: parallax.y * ((shape.id % 3 + 1) * 0.15)
                 }}
                 transition={{
                   default: {
@@ -821,23 +863,13 @@ const App: React.FC = () => {
                     stiffness: 75,
                     damping: 15,
                     mass: 1.05
-                  },
-                  x: {
-                    type: 'spring',
-                    stiffness: 400,
-                    damping: 28,
-                    mass: 0.15
-                  },
-                  y: {
-                    type: 'spring',
-                    stiffness: 400,
-                    damping: 28,
-                    mass: 0.15
                   }
                 }}
                 style={{
                   backgroundColor: bgColor,
                   clipPath: layout.clipPath || 'none',
+                  x: xOffset,
+                  y: yOffset
                 }}
               />
             );
@@ -933,20 +965,14 @@ const App: React.FC = () => {
               className="absolute inset-0 w-full h-full overflow-hidden flex flex-col justify-between gpu-accelerated"
               id={`slide-${currentPage}`}
             >
-              {/* Inner wrapper for interactive 3D stereoscopic depth */}
-              <motion.div
-                className="w-full h-full flex flex-col justify-between"
-                animate={{
-                  x: parallax.x * 0.55,
-                  y: parallax.y * 0.55
-                }}
-                transition={{
-                  type: 'spring',
-                  stiffness: 400,
-                  damping: 28,
-                  mass: 0.15
-                }}
-              >
+               {/* Inner wrapper for interactive 3D stereoscopic depth */}
+               <motion.div
+                 className="w-full h-full flex flex-col justify-between"
+                 style={{
+                   x: wrapperX,
+                   y: wrapperY
+                 }}
+               >
                 {/* SLIDE 0: BRAND LOGO COVER (GOLDEN POSITION) */}
               {currentPage === 0 && (
                 <div className="w-full h-full flex flex-col justify-center items-center px-8 sm:px-16 max-w-3xl mx-auto text-center">
@@ -983,17 +1009,15 @@ const App: React.FC = () => {
                   ) : (
                     <motion.div layoutId="logo-block" className="flex flex-col items-center select-none cursor-pointer">
                       <motion.h1 layoutId="logo-text" className="relative font-display font-black leading-none uppercase select-none text-7xl sm:text-9xl">
-                        <span 
-                          className="absolute left-[6px] top-[6px] text-7xl sm:text-9xl tracking-tighter opacity-20 pointer-events-none"
-                          style={{ color: currentTheme.primary }}
-                        >
-                          {logoText}
-                        </span>
                         <span className="relative text-white tracking-tighter text-7xl sm:text-9xl">
                           {logoText}
                         </span>
                       </motion.h1>
-                      <motion.div layoutId="logo-badge" className="mt-4 bg-black text-white border-2 border-black px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest shadow-flat">
+                      <motion.div 
+                        layoutId="logo-badge" 
+                        className="mt-4 bg-black text-white border-2 border-black px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest"
+                        style={{ boxShadow: shadow4 }}
+                      >
                         Sound Creator & Digital Geek
                       </motion.div>
                     </motion.div>
@@ -1007,17 +1031,15 @@ const App: React.FC = () => {
                   <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-12 w-full">
                     <motion.div layoutId="logo-block" className="flex flex-col items-center md:items-start select-none shrink-0">
                       <motion.h1 layoutId="logo-text" className="relative font-display font-black leading-none uppercase select-none text-5xl sm:text-6xl md:text-7xl">
-                        <span 
-                          className="absolute left-[4px] top-[4px] text-5xl sm:text-6xl md:text-7xl tracking-tighter opacity-20 pointer-events-none"
-                          style={{ color: currentTheme.primary }}
-                        >
-                          {logoText}
-                        </span>
                         <span className="relative text-white tracking-tighter text-5xl sm:text-6xl md:text-7xl">
                           {logoText}
                         </span>
                       </motion.h1>
-                      <motion.div layoutId="logo-badge" className="mt-2 bg-black text-white border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wider shadow-flat-sm">
+                      <motion.div 
+                        layoutId="logo-badge" 
+                        className="mt-2 bg-black text-white border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wider"
+                        style={{ boxShadow: shadow2 }}
+                      >
                         Sound Creator
                       </motion.div>
                     </motion.div>
@@ -1027,7 +1049,8 @@ const App: React.FC = () => {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -30 }}
                       transition={{ duration: 0.5, delay: 0.1 }}
-                      className="p-6 sm:p-8 bg-white border-4 border-black shadow-flat-lg rounded-none max-w-md transition-all flex-1 z-30"
+                      className="p-6 sm:p-8 bg-white border-4 border-black rounded-none max-w-md transition-all flex-1 z-30"
+                      style={{ boxShadow: shadow8 }}
                     >
                       {isEditMode ? (
                         <div className="flex flex-col gap-2">
@@ -1063,7 +1086,10 @@ const App: React.FC = () => {
                 <div className="w-full h-full flex items-center justify-center p-6 sm:p-12">
                   <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-8 max-w-4xl w-full">
                     {image2 ? (
-                      <div className="relative group w-fit h-fit border-4 border-black shadow-flat-lg bg-white overflow-hidden flex items-center justify-center">
+                      <motion.div 
+                        className="relative group w-fit h-fit border-4 border-black bg-white overflow-hidden flex items-center justify-center"
+                        style={{ boxShadow: shadow8 }}
+                      >
                         <img
                           src={image2}
                           alt="L-Gzj Studio View"
@@ -1089,12 +1115,13 @@ const App: React.FC = () => {
                             </button>
                           </div>
                         )}
-                      </div>
+                      </motion.div>
                     ) : (
                       isEditMode ? (
-                        <div 
+                        <motion.div 
                           onClick={() => fileInputRef2.current?.click()}
-                          className="group relative w-full max-w-md aspect-video cursor-pointer bg-white/50 hover:bg-white border-4 border-dashed border-black shadow-flat-lg flex flex-col items-center justify-center p-6 transition-all"
+                          className="group relative w-full max-w-md aspect-video cursor-pointer bg-white/50 hover:bg-white border-4 border-dashed border-black flex flex-col items-center justify-center p-6 transition-colors duration-200"
+                          style={{ boxShadow: shadow8 }}
                         >
                           <Plus className="w-10 h-10 text-black mb-3 group-hover:scale-110 transition-transform" />
                           <span className="font-display font-black text-sm uppercase tracking-wider text-black">
@@ -1103,9 +1130,12 @@ const App: React.FC = () => {
                           <span className="font-mono text-[10px] text-gray-500 mt-1 uppercase tracking-widest">
                             自适应任意比例缩放
                           </span>
-                        </div>
+                        </motion.div>
                       ) : (
-                        <div className="w-full max-w-md aspect-video bg-white/30 border-4 border-black border-dashed flex flex-col items-center justify-center p-6 text-center select-none shadow-flat">
+                        <motion.div 
+                          className="w-full max-w-md aspect-video bg-white/30 border-4 border-black border-dashed flex flex-col items-center justify-center p-6 text-center select-none"
+                          style={{ boxShadow: shadow4 }}
+                        >
                           <span className="text-4xl mb-2">📸</span>
                           <p className="font-display font-black text-sm uppercase tracking-wider text-black">
                             Studio Photo (Empty)
@@ -1113,18 +1143,21 @@ const App: React.FC = () => {
                           <p className="font-mono text-[9px] text-gray-500 uppercase tracking-widest mt-1">
                             请在右上角开启 “编辑模式” 上传图片
                           </p>
-                        </div>
+                        </motion.div>
                       )
                     )}
                     {/* Studio Label Badge */}
-                    <div className="bg-white border-4 border-black p-4 md:p-6 shadow-flat flex md:flex-col items-center justify-center gap-2 rotate-1 md:-rotate-2 min-w-[140px]">
+                    <motion.div 
+                      className="bg-white border-4 border-black p-4 md:p-6 flex md:flex-col items-center justify-center gap-2 rotate-1 md:-rotate-2 min-w-[140px]"
+                      style={{ boxShadow: shadow4 }}
+                    >
                       <span className="font-display font-black text-2xl sm:text-3xl tracking-wider uppercase text-black">
                         Studio
                       </span>
                       <span className="font-mono text-xs font-bold text-gray-500 uppercase tracking-widest hidden md:inline">
                         Full View
                       </span>
-                    </div>
+                    </motion.div>
                   </div>
                 </div>
               )}
@@ -1134,7 +1167,10 @@ const App: React.FC = () => {
                 <div className="w-full h-full flex items-center justify-center p-6 sm:p-12">
                   <div className="flex flex-col md:flex-row-reverse items-center justify-center gap-6 md:gap-8 max-w-4xl w-full">
                     {image3 ? (
-                      <div className="relative group w-fit h-fit border-4 border-black shadow-flat-lg bg-white overflow-hidden flex items-center justify-center">
+                      <motion.div 
+                        className="relative group w-fit h-fit border-4 border-black bg-white overflow-hidden flex items-center justify-center"
+                        style={{ boxShadow: shadow8 }}
+                      >
                         <img
                           src={image3}
                           alt="L-Gzj Desk View"
@@ -1160,12 +1196,13 @@ const App: React.FC = () => {
                             </button>
                           </div>
                         )}
-                      </div>
+                      </motion.div>
                     ) : (
                       isEditMode ? (
-                        <div 
+                        <motion.div 
                           onClick={() => fileInputRef3.current?.click()}
-                          className="group relative w-full max-w-md aspect-video cursor-pointer bg-white/50 hover:bg-white border-4 border-dashed border-black shadow-flat-lg flex flex-col items-center justify-center p-6 transition-all"
+                          className="group relative w-full max-w-md aspect-video cursor-pointer bg-white/50 hover:bg-white border-4 border-dashed border-black flex flex-col items-center justify-center p-6 transition-colors duration-200"
+                          style={{ boxShadow: shadow8 }}
                         >
                           <Plus className="w-10 h-10 text-black mb-3 group-hover:scale-110 transition-transform" />
                           <span className="font-display font-black text-sm uppercase tracking-wider text-black">
@@ -1174,9 +1211,12 @@ const App: React.FC = () => {
                           <span className="font-mono text-[10px] text-gray-500 mt-1 uppercase tracking-widest">
                             自适应任意比例缩放
                           </span>
-                        </div>
+                        </motion.div>
                       ) : (
-                        <div className="w-full max-w-md aspect-video bg-white/30 border-4 border-black border-dashed flex flex-col items-center justify-center p-6 text-center select-none shadow-flat">
+                        <motion.div 
+                          className="w-full max-w-md aspect-video bg-white/30 border-4 border-black border-dashed flex flex-col items-center justify-center p-6 text-center select-none"
+                          style={{ boxShadow: shadow4 }}
+                        >
                           <span className="text-4xl mb-2">📸</span>
                           <p className="font-display font-black text-sm uppercase tracking-wider text-black">
                             Desk Photo (Empty)
@@ -1184,18 +1224,21 @@ const App: React.FC = () => {
                           <p className="font-mono text-[9px] text-gray-500 uppercase tracking-widest mt-1">
                             请在右上角开启 “编辑模式” 上传图片
                           </p>
-                        </div>
+                        </motion.div>
                       )
                     )}
                     {/* Studio Label Badge */}
-                    <div className="bg-white border-4 border-black p-4 md:p-6 shadow-flat flex md:flex-col items-center justify-center gap-2 -rotate-1 md:rotate-2 min-w-[140px]">
+                    <motion.div 
+                      className="bg-white border-4 border-black p-4 md:p-6 flex md:flex-col items-center justify-center gap-2 -rotate-1 md:rotate-2 min-w-[140px]"
+                      style={{ boxShadow: shadow4 }}
+                    >
                       <span className="font-display font-black text-2xl sm:text-3xl tracking-wider uppercase text-black">
                         Studio
                       </span>
                       <span className="font-mono text-xs font-bold text-gray-500 uppercase tracking-widest hidden md:inline">
                         Desk Detail
                       </span>
-                    </div>
+                    </motion.div>
                   </div>
                 </div>
               )}
@@ -1205,12 +1248,16 @@ const App: React.FC = () => {
                 <div className="w-full h-full flex flex-col justify-center px-8 sm:px-16 max-w-md mx-auto">
                   <div className="space-y-6">
                     <h2 className="relative font-display font-black text-5xl sm:text-6xl tracking-tight uppercase select-none text-center">
-                      <span 
+                      <motion.span 
                         className="absolute left-[3px] top-[3px] opacity-20 pointer-events-none"
-                        style={{ color: currentTheme.primary }}
+                        style={{ 
+                          color: currentTheme.primary,
+                          x: logoTextX_18,
+                          y: logoTextY_18
+                        }}
                       >
                         {logoText}
-                      </span>
+                      </motion.span>
                       <span className="relative text-white">
                         {logoText}
                       </span>
@@ -1218,38 +1265,41 @@ const App: React.FC = () => {
 
                     {/* Clean flat-style high-contrast navigation links */}
                     <div className="flex flex-col gap-4 pt-2">
-                      <a
+                      <motion.a
                         href="https://b23.tv/gHcFCBl"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group flex items-center justify-between p-4 bg-white border-2 border-black text-black font-display font-black tracking-tight text-sm sm:text-base uppercase rounded-none hover:bg-black hover:text-white transition-all shadow-flat active:translate-x-0.5 active:translate-y-0.5"
+                        className="group flex items-center justify-between p-4 bg-white border-2 border-black text-black font-display font-black tracking-tight text-sm sm:text-base uppercase rounded-none hover:bg-black hover:text-white transition-colors duration-200 active:translate-x-0.5 active:translate-y-0.5"
+                        style={{ boxShadow: shadow4 }}
                         id="link-bilibili"
                       >
                         <span>Bilibili</span>
-                        <ExternalLink className="w-4 h-4 text-black group-hover:text-white transition-all" />
-                      </a>
+                        <ExternalLink className="w-4 h-4 text-black group-hover:text-white transition-colors duration-200" />
+                      </motion.a>
 
-                      <a
+                      <motion.a
                         href="https://y.music.163.com/m/user?id=1679831678"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group flex items-center justify-between p-4 bg-white border-2 border-black text-black font-display font-black tracking-tight text-sm sm:text-base uppercase rounded-none hover:bg-black hover:text-white transition-all shadow-flat active:translate-x-0.5 active:translate-y-0.5"
+                        className="group flex items-center justify-between p-4 bg-white border-2 border-black text-black font-display font-black tracking-tight text-sm sm:text-base uppercase rounded-none hover:bg-black hover:text-white transition-colors duration-200 active:translate-x-0.5 active:translate-y-0.5"
+                        style={{ boxShadow: shadow4 }}
                         id="link-netease"
                       >
                         <span>网易云音乐</span>
-                        <ExternalLink className="w-4 h-4 text-black group-hover:text-white transition-all" />
-                      </a>
+                        <ExternalLink className="w-4 h-4 text-black group-hover:text-white transition-colors duration-200" />
+                      </motion.a>
 
-                      <a
+                      <motion.a
                         href="https://xhslink.com/m/AGJy3ed47iL"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group flex items-center justify-between p-4 bg-white border-2 border-black text-black font-display font-black tracking-tight text-sm sm:text-base uppercase rounded-none hover:bg-black hover:text-white transition-all shadow-flat active:translate-x-0.5 active:translate-y-0.5"
+                        className="group flex items-center justify-between p-4 bg-white border-2 border-black text-black font-display font-black tracking-tight text-sm sm:text-base uppercase rounded-none hover:bg-black hover:text-white transition-colors duration-200 active:translate-x-0.5 active:translate-y-0.5"
+                        style={{ boxShadow: shadow4 }}
                         id="link-rednote"
                       >
                         <span>小红书</span>
-                        <ExternalLink className="w-4 h-4 text-black group-hover:text-white transition-all" />
-                      </a>
+                        <ExternalLink className="w-4 h-4 text-black group-hover:text-white transition-colors duration-200" />
+                      </motion.a>
                     </div>
                   </div>
                 </div>
@@ -1261,7 +1311,10 @@ const App: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch w-full max-h-[75vh]">
                     {/* Left Side: Message Input Form (5 cols) */}
                     <div className="md:col-span-5 flex flex-col justify-center">
-                      <div className="bg-white border-4 border-black p-4 sm:p-5 shadow-flat-md flex flex-col h-full justify-between">
+                      <motion.div 
+                        className="bg-white border-4 border-black p-4 sm:p-5 flex flex-col h-full justify-between"
+                        style={{ boxShadow: shadow6 }}
+                      >
                         <div>
                           <h3 className="font-display font-black text-lg sm:text-xl uppercase tracking-tight text-black mb-1">
                             Leave a Message
@@ -1323,14 +1376,15 @@ const App: React.FC = () => {
                             />
                           </div>
 
-                          <button
+                          <motion.button
                             type="submit"
-                            className="w-full p-2.5 bg-black text-white font-display font-black text-xs sm:text-sm uppercase tracking-widest border-2 border-black shadow-flat hover:bg-white hover:text-black active:translate-x-0.5 active:translate-y-0.5 transition-all"
+                            className="w-full p-2.5 bg-black text-white font-display font-black text-xs sm:text-sm uppercase tracking-widest border-2 border-black hover:bg-white hover:text-black active:translate-x-0.5 active:translate-y-0.5 transition-colors duration-200"
+                            style={{ boxShadow: shadow4 }}
                           >
                             发送留言 SEND
-                          </button>
+                          </motion.button>
                         </form>
-                      </div>
+                      </motion.div>
                     </div>
 
                     {/* Right Side: Message List (7 cols) */}
@@ -1344,14 +1398,15 @@ const App: React.FC = () => {
                                 initial={{ opacity: 0, y: 15 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.9 }}
-                                className="p-3 bg-white border-2 border-black shadow-flat flex gap-3 items-start animate-fade-in"
+                                className="p-3 bg-white border-2 border-black flex gap-3 items-start animate-fade-in"
+                                style={{ boxShadow: shadow4 }}
                               >
-                                <div 
-                                  className="w-8 h-8 rounded-full border border-black flex items-center justify-center text-base shrink-0 shadow-flat-sm"
-                                  style={{ backgroundColor: msg.avatarColor }}
+                                <motion.div 
+                                  className="w-8 h-8 rounded-full border border-black flex items-center justify-center text-base shrink-0"
+                                  style={{ backgroundColor: msg.avatarColor, boxShadow: shadow2 }}
                                 >
                                   {msg.avatarIcon}
-                                </div>
+                                </motion.div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center justify-between mb-0.5">
                                     <span className="font-sans font-extrabold text-xs text-black truncate">
@@ -1362,14 +1417,15 @@ const App: React.FC = () => {
                                         {msg.time}
                                       </span>
                                       {(isEditMode || (currentUser && currentUser.email === 'lgzj416@gmail.com')) && (
-                                        <button
+                                        <motion.button
                                           onClick={() => handleAdminDeleteMessage(msg.id)}
-                                          className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase bg-red-100 hover:bg-red-500 hover:text-white text-red-600 border border-red-400 rounded-sm transition-all cursor-pointer shadow-flat-sm active:translate-x-[0.5px] active:translate-y-[0.5px]"
+                                          className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase bg-red-100 hover:bg-red-500 hover:text-white text-red-600 border border-red-400 rounded-sm transition-all cursor-pointer active:translate-x-[0.5px] active:translate-y-[0.5px]"
+                                          style={{ boxShadow: shadow1_5 }}
                                           title="删除此条留言"
                                         >
                                           <span>🗑️</span>
                                           <span className="hidden sm:inline">删除</span>
-                                        </button>
+                                        </motion.button>
                                       )}
                                     </div>
                                   </div>
@@ -1525,7 +1581,7 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 };
