@@ -306,6 +306,9 @@ const App: React.FC = () => {
   const [prevPage, setPrevPage] = useState<number>(0);
   const [activeThemeIdx, setActiveThemeIdx] = useState<number>(0);
   
+  // Interactive stereoscopic 3D parallax offsets
+  const [parallax, setParallax] = useState({ x: 0, y: 0 });
+  
   // Aspect ratio self-adaptation settings: 'fluid' (default), '9-16' (mobile), '3-4' (tablet)
   const [aspectRatio, setAspectRatio] = useState<'fluid' | '9-16' | '3-4'>('fluid');
 
@@ -654,6 +657,22 @@ const App: React.FC = () => {
     touchStartX.current = e.targetTouches[0].clientX;
   };
 
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const currentX = e.targetTouches[0].clientX;
+    const currentY = e.targetTouches[0].clientY;
+    const dx = currentX - touchStartX.current;
+    const dy = currentY - touchStartY.current;
+
+    // Small range clamp: prevent moving too far (max 40px)
+    const maxOffset = 40;
+    const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
+    const px = clamp(dx, -maxOffset, maxOffset);
+    const py = clamp(dy, -maxOffset, maxOffset);
+
+    setParallax({ x: px, y: py });
+  };
+
   const onTouchEnd = (e: React.TouchEvent) => {
     if (touchStartY.current === null || touchStartX.current === null) return;
     const touchEndY = e.changedTouches[0].clientY;
@@ -677,6 +696,29 @@ const App: React.FC = () => {
     }
     touchStartY.current = null;
     touchStartX.current = null;
+
+    // Elastic snap back on release
+    setParallax({ x: 0, y: 0 });
+  };
+
+  // Mouse move for 3D stereoscopic parallax on desktop
+  const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = e.clientX - centerX;
+    const dy = e.clientY - centerY;
+    
+    // Normalized parallax multiplier: max 45px displacement in any direction
+    const maxMove = 45;
+    const xOffset = (dx / (rect.width / 2)) * maxMove;
+    const yOffset = (dy / (rect.height / 2)) * maxMove;
+    
+    setParallax({ x: xOffset, y: yOffset });
+  };
+
+  const onMouseLeave = () => {
+    setParallax({ x: 0, y: 0 });
   };
 
   // Keyboard controls
@@ -722,7 +764,10 @@ const App: React.FC = () => {
       className={`w-full h-full relative overflow-hidden flex flex-col justify-center items-center h5-container select-none bg-gradient-to-b ${currentTheme.bgGrad} transition-colors duration-1000`}
       onWheel={onWheel}
       onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
       id="root-viewport"
     >
       {/* Semi-translucent mask when not in fluid mode to make the mockup stand out beautifully */}
@@ -766,13 +811,29 @@ const App: React.FC = () => {
                   height: layout.height,
                   rotate: layout.rotate,
                   borderRadius: layout.borderRadius || '0px',
-                  opacity: layout.opacity
+                  opacity: layout.opacity,
+                  x: parallax.x * ((shape.id % 3 + 1) * 0.15),
+                  y: parallax.y * ((shape.id % 3 + 1) * 0.15)
                 }}
                 transition={{
-                  type: 'spring',
-                  stiffness: 75,
-                  damping: 15,
-                  mass: 1.05
+                  default: {
+                    type: 'spring',
+                    stiffness: 75,
+                    damping: 15,
+                    mass: 1.05
+                  },
+                  x: {
+                    type: 'spring',
+                    stiffness: 400,
+                    damping: 28,
+                    mass: 0.15
+                  },
+                  y: {
+                    type: 'spring',
+                    stiffness: 400,
+                    damping: 28,
+                    mass: 0.15
+                  }
                 }}
                 style={{
                   backgroundColor: bgColor,
@@ -872,7 +933,21 @@ const App: React.FC = () => {
               className="absolute inset-0 w-full h-full overflow-hidden flex flex-col justify-between gpu-accelerated"
               id={`slide-${currentPage}`}
             >
-              {/* SLIDE 0: BRAND LOGO COVER (GOLDEN POSITION) */}
+              {/* Inner wrapper for interactive 3D stereoscopic depth */}
+              <motion.div
+                className="w-full h-full flex flex-col justify-between"
+                animate={{
+                  x: parallax.x * 0.55,
+                  y: parallax.y * 0.55
+                }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 400,
+                  damping: 28,
+                  mass: 0.15
+                }}
+              >
+                {/* SLIDE 0: BRAND LOGO COVER (GOLDEN POSITION) */}
               {currentPage === 0 && (
                 <div className="w-full h-full flex flex-col justify-center items-center px-8 sm:px-16 max-w-3xl mx-auto text-center">
                   {isEditMode ? (
@@ -1317,6 +1392,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
+              </motion.div>
             </motion.div>
           </AnimatePresence>
         </div>
